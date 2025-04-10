@@ -114,25 +114,27 @@ public class MsMediaApp {
         // Initial Spring setup
         SpringApplication app = new SpringApplication(MsMediaApp.class);
         DefaultProfileUtil.addDefaultProfile(app);
+
         // Load additional configuration for dev environment
         app.setAdditionalProfiles("dev");
         System.setProperty("spring.config.additional-location", "classpath:/config/consul-config-dev.yml");
-        String remoteHost = System.getProperty("ssh.remote.host");
-        String remotePortStr = System.getProperty("ssh.remote.port");
-        int remotePort = remotePortStr != null ? Integer.parseInt(remotePortStr) : 8803;
-        System.setProperty("SSH_REMOTE_PORT", String.valueOf(remotePort));
-        String localPortStr = System.getProperty("ssh.local.port");
-        int localPort = localPortStr != null ? Integer.parseInt(localPortStr) : 8080;
-        String user = System.getProperty("ssh.user");
-        String enableSshForwardingStr = System.getProperty("ssh.forwarding.enabled");
-        if (enableSshForwardingStr == null) {
-            enableSshForwardingStr = System.getenv().get("SSH_FORWARDING_ENABLED");
-        }
-        boolean enableSshForwarding = enableSshForwardingStr != null ? 
-            Boolean.parseBoolean(enableSshForwardingStr) : true;
-        // Set up SSH tunnel before starting the application if enabled
+        
+        // Now start the application with all the configuration from YML
+        Environment env = app.run(args).getEnvironment();
+
+        // After Spring environment is loaded, get the configuration values
+        String remoteHost = env.getProperty("ssh.remote.host");
+        int remotePort = Integer.parseInt(env.getProperty("ssh.remote.port"));
+        int localPort = Integer.parseInt(env.getProperty("ssh.local.port"));
+        String user = env.getProperty("ssh.user");
+        boolean enableSshForwarding = Boolean.parseBoolean(env.getProperty("ssh.forwarding.enabled"));
+        
+        // Ensure consul discovery port matches SSH remote port
+        System.setProperty("spring.cloud.consul.discovery.port", String.valueOf(remotePort));
+
+        // Set up SSH tunnel after application startup if enabled
         if (enableSshForwarding) {
-            LOG.info("Establishing SSH tunnel before application startup...");
+            LOG.info("Establishing SSH tunnel after application startup...");
             setupSshPortForwarding(remoteHost, remotePort, localPort, user);
             // Give the SSH connection some time to establish
             try {
@@ -141,8 +143,7 @@ public class MsMediaApp {
                 Thread.currentThread().interrupt();
             }
         }
-        // Now start the application
-        Environment env = app.run(args).getEnvironment();
+
         logApplicationStartup(env);
     }
 

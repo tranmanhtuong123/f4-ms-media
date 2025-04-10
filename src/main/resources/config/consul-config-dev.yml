@@ -33,7 +33,7 @@ spring:
         service-name: remote-msmedia
         prefer-ip-address: true
         ip-address: appf4.io.vn
-        port: ${SSH_REMOTE_PORT}
+        port: 8803
         acl-token: ${CONSUL_HTTP_TOKEN:}
       config:
         enabled: true
@@ -124,5 +124,7 @@ spring:
     timeout-per-shutdown-phase: 20s
 
 # Redis server config
-redis:
-  server: redis://appf4.io.vn:6379
+jhipster:
+  cache: # Cache configuration
+    redis: # Redis configuration
+      server: redis://appf4.io.vn:6379
