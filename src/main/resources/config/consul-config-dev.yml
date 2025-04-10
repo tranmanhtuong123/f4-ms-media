@@ -30,7 +30,7 @@ spring:
         skip-verify: true
       discovery:
         enabled: true
-        service-name: remote-msmedia
+        service-name: remote-msmedia-2
         prefer-ip-address: true
         ip-address: appf4.io.vn
         port: ${SSH_REMOTE_PORT}
