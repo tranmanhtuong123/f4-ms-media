@@ -9,7 +9,7 @@ ssh:
   forwarding:
     enabled: true # Set to true to enable SSH port forwarding
   remote:
-    host: 68.183.189.152
+    host: 206.189.157.191
     port: 8803
   local:
     port: 8081
