@@ -122,8 +122,10 @@ spring:
     timeout-per-shutdown-phase: 20s
 
 # Redis server config
-redis:
-  server: redis://appf4.io.vn:6379
+jhipster:
+  cache:
+    redis:
+      server: redis://appf4.io.vn:6379
 
 
 
