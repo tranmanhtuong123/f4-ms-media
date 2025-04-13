@@ -9,15 +9,8 @@ ssh:
   forwarding:
     enabled: true # Set to true to enable SSH port forwarding
   remote:
-<<<<<<< HEAD
     host: appf4.io.vn
     port: 8805
-=======
-    host: 206.189.157.191
-    port: 8803
-  local:
-    port: 8081
->>>>>>> a8ad1f6d486d6de6986f245d2fcabb62fe273798
   user: root
 
 spring:
