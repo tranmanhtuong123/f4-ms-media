@@ -9,10 +9,8 @@ ssh:
   forwarding:
     enabled: true # Set to true to enable SSH port forwarding
   remote:
-    host: 68.183.189.152
-    port: 8803
-  local:
-    port: 8081
+    host: appf4.io.vn
+    port: 8805
   user: root
 
 spring:
@@ -33,7 +31,7 @@ spring:
         service-name: remote-msmedia
         prefer-ip-address: true
         ip-address: appf4.io.vn
-        port: 8803
+        port: ${SSH_REMOTE_PORT:}
         acl-token: ${CONSUL_HTTP_TOKEN:}
       config:
         enabled: true

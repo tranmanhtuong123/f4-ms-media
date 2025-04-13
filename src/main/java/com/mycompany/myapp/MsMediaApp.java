@@ -77,7 +77,6 @@ public class MsMediaApp {
         LOG.info(
                 CRLFLogConverter.CRLF_SAFE_MARKER,
                 """
-
                         ----------------------------------------------------------
                         \tApplication '{}' is running! Access URLs:
                         \tLocal: \t\t{}://localhost:{}{}
@@ -123,11 +122,11 @@ public class MsMediaApp {
         Environment env = app.run(args).getEnvironment();
 
         // After Spring environment is loaded, get the configuration values
-        String remoteHost = env.getProperty("ssh.remote.host");
-        int remotePort = Integer.parseInt(env.getProperty("ssh.remote.port"));
-        int localPort = Integer.parseInt(env.getProperty("ssh.local.port"));
-        String user = env.getProperty("ssh.user");
-        boolean enableSshForwarding = Boolean.parseBoolean(env.getProperty("ssh.forwarding.enabled"));
+            String remoteHost = env.getProperty("ssh.remote.host");
+            int remotePort = Integer.parseInt(env.getProperty("ssh.remote.port"));
+            int localPort = Integer.parseInt(env.getProperty("server.port"));
+            String user = env.getProperty("ssh.user");
+            boolean enableSshForwarding = Boolean.parseBoolean(env.getProperty("ssh.forwarding.enabled"));
         
         // Ensure consul discovery port matches SSH remote port
         System.setProperty("spring.cloud.consul.discovery.port", String.valueOf(remotePort));
@@ -158,17 +157,36 @@ public class MsMediaApp {
      */
     private static void setupSshPortForwarding(String remoteHost, int remotePort, int localPort, String user) {
         try {
-            String sshCommand = String.format("ssh -f -N -R %d:localhost:%d %s@%s",
-                    remotePort, localPort, user, remoteHost);
+            // Check if running on Windows
+            boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+            
+            String sshCommand;
+            if (isWindows) {
+                // Windows requires start command to run properly in background
+                sshCommand = String.format("cmd /c start /b ssh -N -R %d:localhost:%d %s@%s",
+                        remotePort, localPort, user, remoteHost);
+            } else {
+                // Unix/Linux version with nohup to run in background
+                sshCommand = String.format("nohup ssh -N -R %d:localhost:%d %s@%s &",
+                        remotePort, localPort, user, remoteHost);
+            }
+            
             LOG.info("Starting SSH port forwarding: {}", sshCommand);
 
             Process process = Runtime.getRuntime().exec(sshCommand);
-            int exitCode = process.waitFor();
-
-            if (exitCode == 0) {
-                LOG.info("SSH port forwarding established successfully");
+            
+            // Don't wait for the process to complete for background operation
+            if (!isWindows) {
+                // For Unix/Linux, we don't need to wait as nohup & will take care of it
+                LOG.info("SSH port forwarding initiated in background");
             } else {
-                LOG.error("SSH port forwarding failed with exit code: {}", exitCode);
+                // For Windows, brief check that the process started
+                int exitCode = process.waitFor();
+                if (exitCode == 0) {
+                    LOG.info("SSH port forwarding initiated in background");
+                } else {
+                    LOG.error("SSH port forwarding failed with exit code: {}", exitCode);
+                }
             }
         } catch (IOException | InterruptedException e) {
             LOG.error("Error setting up SSH port forwarding", e);
