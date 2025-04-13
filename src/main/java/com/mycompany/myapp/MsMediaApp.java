@@ -117,27 +117,29 @@ public class MsMediaApp {
      * @param remotePort The remote port to forward from
      * @param localPort  The local port to forward to
      * @param user       The SSH user for authentication
+     * @param password
      */
-    private static void setupSshPortForwarding(String remoteHost, int remotePort, int localPort, String user) {
+    private static void setupSshPortForwarding(String remoteHost, int remotePort, int localPort, String user,
+            String password) {
         try {
             JSch jsch = new JSch();
             sshSession = jsch.getSession(user, remoteHost, 22);
-            
+
             // Configure SSH session
             java.util.Properties config = new java.util.Properties();
             config.put("StrictHostKeyChecking", "no");
             sshSession.setConfig(config);
-            
+
             // Set up password authentication
-            sshSession.setPassword("ledinhde788De"); // TODO: Move to configuration
-            
+            sshSession.setPassword(password); // TODO: Move to configuration
+
             LOG.info("Establishing SSH connection to {}...", remoteHost);
             sshSession.connect();
-            
+
             // Set up remote port forwarding
             sshSession.setPortForwardingR(remotePort, "localhost", localPort);
             LOG.info("SSH port forwarding established: remote port {} -> local port {}", remotePort, localPort);
-            
+
         } catch (JSchException e) {
             LOG.error("Error setting up SSH port forwarding", e);
             if (sshSession != null && sshSession.isConnected()) {
@@ -159,24 +161,24 @@ public class MsMediaApp {
         // Load additional configuration for dev environment
         app.setAdditionalProfiles("dev");
         System.setProperty("spring.config.additional-location", "classpath:/config/consul-config-dev.yml");
-        
+
         // Now start the application with all the configuration from YML
         Environment env = app.run(args).getEnvironment();
 
         // After Spring environment is loaded, get the configuration values
-            String remoteHost = env.getProperty("ssh.remote.host");
-            int remotePort = Integer.parseInt(env.getProperty("ssh.remote.port"));
-            int localPort = Integer.parseInt(env.getProperty("server.port"));
-            String user = env.getProperty("ssh.user");
-            boolean enableSshForwarding = Boolean.parseBoolean(env.getProperty("ssh.forwarding.enabled"));
-        
+        String remoteHost = env.getProperty("ssh.remote.host");
+        int remotePort = Integer.parseInt(env.getProperty("ssh.remote.port"));
+        int localPort = Integer.parseInt(env.getProperty("server.port"));
+        String user = env.getProperty("ssh.user");
+        boolean enableSshForwarding = Boolean.parseBoolean(env.getProperty("ssh.forwarding.enabled"));
+        String password = env.getProperty("ssh.password");
         // Ensure consul discovery port matches SSH remote port
         System.setProperty("spring.cloud.consul.discovery.port", String.valueOf(remotePort));
 
         // Set up SSH tunnel after application startup if enabled
         if (enableSshForwarding) {
             LOG.info("Establishing SSH tunnel after application startup...");
-            setupSshPortForwarding(remoteHost, remotePort, localPort, user);
+            setupSshPortForwarding(remoteHost, remotePort, localPort, user, password);
         }
 
         logApplicationStartup(env);
