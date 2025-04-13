@@ -16,7 +16,7 @@ ssh:
   
 spring:
   application:
-    name: RemoteApiGateway
+    name: RemoteMsMedia
   profiles:
     active: dev,api-docs
   cloud:
