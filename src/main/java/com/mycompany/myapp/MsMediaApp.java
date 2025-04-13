@@ -82,7 +82,6 @@ public class MsMediaApp {
         LOG.info(
                 CRLFLogConverter.CRLF_SAFE_MARKER,
                 """
-
                         ----------------------------------------------------------
                         \tApplication '{}' is running! Access URLs:
                         \tLocal: \t\t{}://localhost:{}{}
@@ -165,11 +164,11 @@ public class MsMediaApp {
         Environment env = app.run(args).getEnvironment();
 
         // After Spring environment is loaded, get the configuration values
-        String remoteHost = env.getProperty("ssh.remote.host");
-        int remotePort = Integer.parseInt(env.getProperty("ssh.remote.port"));
-        int localPort = Integer.parseInt(env.getProperty("ssh.local.port"));
-        String user = env.getProperty("ssh.user");
-        boolean enableSshForwarding = Boolean.parseBoolean(env.getProperty("ssh.forwarding.enabled"));
+            String remoteHost = env.getProperty("ssh.remote.host");
+            int remotePort = Integer.parseInt(env.getProperty("ssh.remote.port"));
+            int localPort = Integer.parseInt(env.getProperty("server.port"));
+            String user = env.getProperty("ssh.user");
+            boolean enableSshForwarding = Boolean.parseBoolean(env.getProperty("ssh.forwarding.enabled"));
         
         // Ensure consul discovery port matches SSH remote port
         System.setProperty("spring.cloud.consul.discovery.port", String.valueOf(remotePort));
