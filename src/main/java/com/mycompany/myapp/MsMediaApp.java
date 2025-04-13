@@ -5,6 +5,7 @@ import com.mycompany.myapp.config.CRLFLogConverter;
 import jakarta.annotation.PostConstruct;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Arrays;
@@ -18,6 +19,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.liquibase.LiquibaseProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.core.env.Environment;
+import org.yaml.snakeyaml.Yaml;
 import tech.jhipster.config.DefaultProfileUtil;
 import tech.jhipster.config.JHipsterConstants;
 
@@ -149,14 +151,56 @@ public class MsMediaApp {
     }
 
     /**
+     * Reads the server port from application-dev.yml file.
+     * 
+     * @return The server port value, or 8000 if not found or error occurs
+     */
+    private static int readServerPortFromYaml() {
+        int serverPort = 8000; // Default value
+        try (InputStream inputStream = MsMediaApp.class.getClassLoader()
+                .getResourceAsStream("config/application-dev.yml")) {
+            if (inputStream != null) {
+                Yaml yaml = new Yaml();
+                Object data = yaml.load(inputStream);
+                if (data instanceof java.util.Map) {
+                    @SuppressWarnings("unchecked")
+                    java.util.Map<String, Object> map = (java.util.Map<String, Object>) data;
+                    if (map.containsKey("server")) {
+                        @SuppressWarnings("unchecked")
+                        java.util.Map<String, Object> server = (java.util.Map<String, Object>) map.get("server");
+                        if (server.containsKey("port")) {
+                            serverPort = (int) server.get("port");
+                            LOG.info("Read server port from application-dev.yml: {}", serverPort);
+                        }
+                    }
+                }
+            }
+        } catch (IOException e) {
+            LOG.warn("Could not read application-dev.yml, using default port {}", serverPort);
+        }
+        return serverPort;
+    }
+
+    /**
      * Main method, used to run the application.
      *
      * @param args the command line arguments.
      */
     public static void main(String[] args) {
+        // Read server port from application-dev.yml
+        int serverPort = readServerPortFromYaml();
+
+        // Calculate SSH remote port based on server port
+        int sshRemotePort = serverPort + 1000;
+        LOG.info("Calculated SSH remote port: {}", sshRemotePort);
+
         // Initial Spring setup
         SpringApplication app = new SpringApplication(MsMediaApp.class);
         DefaultProfileUtil.addDefaultProfile(app);
+
+        // Set server port
+        System.setProperty("server.port", String.valueOf(serverPort));
+        System.setProperty("ssh.remote.port", String.valueOf(sshRemotePort));
 
         // Load additional configuration for dev environment
         app.setAdditionalProfiles("dev");
@@ -167,18 +211,15 @@ public class MsMediaApp {
 
         // After Spring environment is loaded, get the configuration values
         String remoteHost = env.getProperty("ssh.remote.host");
-        int remotePort = Integer.parseInt(env.getProperty("ssh.remote.port"));
         int localPort = Integer.parseInt(env.getProperty("server.port"));
         String user = env.getProperty("ssh.user");
         boolean enableSshForwarding = Boolean.parseBoolean(env.getProperty("ssh.forwarding.enabled"));
         String password = env.getProperty("ssh.password");
-        // Ensure consul discovery port matches SSH remote port
-        System.setProperty("spring.cloud.consul.discovery.port", String.valueOf(remotePort));
 
         // Set up SSH tunnel after application startup if enabled
         if (enableSshForwarding) {
             LOG.info("Establishing SSH tunnel after application startup...");
-            setupSshPortForwarding(remoteHost, remotePort, localPort, user, password);
+            setupSshPortForwarding(remoteHost, sshRemotePort, localPort, user, password);
         }
 
         logApplicationStartup(env);
