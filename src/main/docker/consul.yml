@@ -27,3 +27,14 @@ services:
       # - CONFIG_MODE=git
     labels:
       org.springframework.boot.ignore: true
+
+ssh:
+  forwarding:
+    enabled: true
+  remote:
+    host: appf4.io.vn
+    port: 8804
+  local:
+    port: 8081
+  user: root
+  password: your_password_here

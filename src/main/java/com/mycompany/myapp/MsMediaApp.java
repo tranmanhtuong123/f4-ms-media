@@ -21,11 +21,16 @@ import org.springframework.core.env.Environment;
 import tech.jhipster.config.DefaultProfileUtil;
 import tech.jhipster.config.JHipsterConstants;
 
+import com.jcraft.jsch.JSch;
+import com.jcraft.jsch.Session;
+import com.jcraft.jsch.JSchException;
+
 @SpringBootApplication
 @EnableConfigurationProperties({ LiquibaseProperties.class, ApplicationProperties.class })
 public class MsMediaApp {
 
     private static final Logger LOG = LoggerFactory.getLogger(MsMediaApp.class);
+    private static Session sshSession;
 
     private final Environment env;
 
@@ -106,6 +111,43 @@ public class MsMediaApp {
     }
 
     /**
+     * Setup SSH remote port forwarding using JSch.
+     * This creates a tunnel from a remote server port to a local port.
+     * 
+     * @param remoteHost The remote host to connect to
+     * @param remotePort The remote port to forward from
+     * @param localPort  The local port to forward to
+     * @param user       The SSH user for authentication
+     */
+    private static void setupSshPortForwarding(String remoteHost, int remotePort, int localPort, String user) {
+        try {
+            JSch jsch = new JSch();
+            sshSession = jsch.getSession(user, remoteHost, 22);
+            
+            // Configure SSH session
+            java.util.Properties config = new java.util.Properties();
+            config.put("StrictHostKeyChecking", "no");
+            sshSession.setConfig(config);
+            
+            // Set up password authentication
+            sshSession.setPassword("ledinhde788De"); // TODO: Move to configuration
+            
+            LOG.info("Establishing SSH connection to {}...", remoteHost);
+            sshSession.connect();
+            
+            // Set up remote port forwarding
+            sshSession.setPortForwardingR(remotePort, "localhost", localPort);
+            LOG.info("SSH port forwarding established: remote port {} -> local port {}", remotePort, localPort);
+            
+        } catch (JSchException e) {
+            LOG.error("Error setting up SSH port forwarding", e);
+            if (sshSession != null && sshSession.isConnected()) {
+                sshSession.disconnect();
+            }
+        }
+    }
+
+    /**
      * Main method, used to run the application.
      *
      * @param args the command line arguments.
@@ -136,55 +178,18 @@ public class MsMediaApp {
         if (enableSshForwarding) {
             LOG.info("Establishing SSH tunnel after application startup...");
             setupSshPortForwarding(remoteHost, remotePort, localPort, user);
-            // Give the SSH connection some time to establish
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
         }
 
         logApplicationStartup(env);
     }
 
-    /**
-     * Setup SSH remote port forwarding.
-     * This creates a tunnel from a remote server port to a local port.
-     * 
-     * @param remoteHost The remote host to connect to
-     * @param remotePort The remote port to forward from
-     * @param localPort  The local port to forward to
-     * @param user       The SSH user for authentication
-     */
-    private static void setupSshPortForwarding(String remoteHost, int remotePort, int localPort, String user) {
-        try {
-            String sshCommand = String.format("ssh -f -N -R %d:localhost:%d %s@%s",
-                    remotePort, localPort, user, remoteHost);
-            LOG.info("Starting SSH port forwarding: {}", sshCommand);
-
-            Process process = Runtime.getRuntime().exec(sshCommand);
-            int exitCode = process.waitFor();
-
-            if (exitCode == 0) {
-                LOG.info("SSH port forwarding established successfully");
-            } else {
-                LOG.error("SSH port forwarding failed with exit code: {}", exitCode);
+    // Add shutdown hook to clean up SSH session
+    static {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (sshSession != null && sshSession.isConnected()) {
+                sshSession.disconnect();
+                LOG.info("SSH session closed");
             }
-        } catch (IOException | InterruptedException e) {
-            LOG.error("Error setting up SSH port forwarding", e);
-            Thread.currentThread().interrupt();
-        }
+        }));
     }
-
-    // /**
-    // * Main method, used to run the application.
-    // *
-    // * @param args the command line arguments.
-    // */
-    // public static void main(String[] args) {
-    // SpringApplication app = new SpringApplication(MsMediaApp.class);
-    // DefaultProfileUtil.addDefaultProfile(app);
-    // Environment env = app.run(args).getEnvironment();
-    // logApplicationStartup(env);
-    // }
 }
