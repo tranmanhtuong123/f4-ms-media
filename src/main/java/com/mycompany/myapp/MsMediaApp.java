@@ -1,16 +1,17 @@
 package com.mycompany.myapp;
 
+import com.jcraft.jsch.JSch;
+import com.jcraft.jsch.Session;
 import com.mycompany.myapp.config.ApplicationProperties;
 import com.mycompany.myapp.config.CRLFLogConverter;
 import jakarta.annotation.PostConstruct;
-
-import java.io.IOException;
-import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Optional;
+import java.io.IOException;
+import java.io.InputStream;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,14 +19,13 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.liquibase.LiquibaseProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.Environment;
-import org.yaml.snakeyaml.Yaml;
+import org.springframework.core.env.StandardEnvironment;
+import org.springframework.core.io.ClassPathResource;
 import tech.jhipster.config.DefaultProfileUtil;
 import tech.jhipster.config.JHipsterConstants;
-
-import com.jcraft.jsch.JSch;
-import com.jcraft.jsch.Session;
-import com.jcraft.jsch.JSchException;
+import org.yaml.snakeyaml.Yaml;
 
 @SpringBootApplication
 @EnableConfigurationProperties({ LiquibaseProperties.class, ApplicationProperties.class })
@@ -37,12 +37,11 @@ public class MsMediaApp {
     private final Environment env;
 
     public MsMediaApp(Environment env) {
-        super();
         this.env = env;
     }
 
     /**
-     * Initializes msMedia.
+     * Initializes apiGateway.
      * <p>
      * Spring profiles can be configured with a program argument
      * --spring.profiles.active=your-active-profile
@@ -67,6 +66,58 @@ public class MsMediaApp {
         }
     }
 
+    /**
+     * Setup SSH remote port forwarding using JSch.
+     * This creates a tunnel from a remote server port to a local port.
+     * 
+     * @param remoteHost The remote host to connect to
+     * @param remotePort The remote port to forward from
+     * @param localPort  The local port to forward to
+     * @param user       The SSH user for authentication
+     * @param password
+     */
+    private static void setupSshPortForwarding(String remoteHost, int remotePort, int localPort, String user,
+            String password) {
+        try {
+            JSch jsch = new JSch();
+            sshSession = jsch.getSession(user, remoteHost, 22);
+
+            // Configure the session
+            java.util.Properties config = new java.util.Properties();
+            config.put("StrictHostKeyChecking", "no");
+            sshSession.setConfig(config);
+
+            // Set up password authentication (you might want to use key-based auth instead)
+            sshSession.setPassword(password);
+
+            LOG.info("Connecting to SSH server...");
+            sshSession.connect();
+
+            // Set up port forwarding
+            sshSession.setPortForwardingR(remotePort, "localhost", localPort);
+            LOG.info("SSH port forwarding established: remote port {} -> local port {}", remotePort, localPort);
+
+        } catch (Exception e) {
+            LOG.error("Error setting up SSH port forwarding", e);
+            if (sshSession != null && sshSession.isConnected()) {
+                sshSession.disconnect();
+            }
+        }
+    }
+
+    /**
+     * Clean up SSH session when the application shuts down
+     */
+    @PostConstruct
+    public void cleanup() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (sshSession != null && sshSession.isConnected()) {
+                sshSession.disconnect();
+                LOG.info("SSH session disconnected");
+            }
+        }));
+    }
+
     private static void logApplicationStartup(Environment env) {
         String protocol = Optional.ofNullable(env.getProperty("server.ssl.key-store")).map(key -> "https")
                 .orElse("http");
@@ -84,6 +135,7 @@ public class MsMediaApp {
         LOG.info(
                 CRLFLogConverter.CRLF_SAFE_MARKER,
                 """
+
                         ----------------------------------------------------------
                         \tApplication '{}' is running! Access URLs:
                         \tLocal: \t\t{}://localhost:{}{}
@@ -112,73 +164,33 @@ public class MsMediaApp {
     }
 
     /**
-     * Setup SSH remote port forwarding using JSch.
-     * This creates a tunnel from a remote server port to a local port.
-     * 
-     * @param remoteHost The remote host to connect to
-     * @param remotePort The remote port to forward from
-     * @param localPort  The local port to forward to
-     * @param user       The SSH user for authentication
-     * @param password
-     */
-    private static void setupSshPortForwarding(String remoteHost, int remotePort, int localPort, String user,
-            String password) {
-        try {
-            JSch jsch = new JSch();
-            sshSession = jsch.getSession(user, remoteHost, 22);
-
-            // Configure SSH session
-            java.util.Properties config = new java.util.Properties();
-            config.put("StrictHostKeyChecking", "no");
-            sshSession.setConfig(config);
-
-            // Set up password authentication
-            sshSession.setPassword(password); // TODO: Move to configuration
-
-            LOG.info("Establishing SSH connection to {}...", remoteHost);
-            sshSession.connect();
-
-            // Set up remote port forwarding
-            sshSession.setPortForwardingR(remotePort, "localhost", localPort);
-            LOG.info("SSH port forwarding established: remote port {} -> local port {}", remotePort, localPort);
-
-        } catch (JSchException e) {
-            LOG.error("Error setting up SSH port forwarding", e);
-            if (sshSession != null && sshSession.isConnected()) {
-                sshSession.disconnect();
-            }
-        }
-    }
-
-    /**
      * Reads the server port from application-dev.yml file.
      * 
-     * @return The server port value, or 8000 if not found or error occurs
+     * @return The server port from the configuration file, or 8800 if not found or
+     *         error
      */
-    private static int readServerPortFromYaml() {
-        int serverPort = 8000; // Default value
-        try (InputStream inputStream = MsMediaApp.class.getClassLoader()
-                .getResourceAsStream("config/application-dev.yml")) {
-            if (inputStream != null) {
-                Yaml yaml = new Yaml();
-                Object data = yaml.load(inputStream);
-                if (data instanceof java.util.Map) {
+    private static int readServerPortFromConfig() {
+        int defaultPort = 8000;
+        try (InputStream inputStream = new ClassPathResource("config/application-dev.yml").getInputStream()) {
+            Yaml yaml = new Yaml();
+            Object data = yaml.load(inputStream);
+            if (data instanceof java.util.Map) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> map = (java.util.Map<String, Object>) data;
+                if (map.containsKey("server") && map.get("server") instanceof java.util.Map) {
                     @SuppressWarnings("unchecked")
-                    java.util.Map<String, Object> map = (java.util.Map<String, Object>) data;
-                    if (map.containsKey("server")) {
-                        @SuppressWarnings("unchecked")
-                        java.util.Map<String, Object> server = (java.util.Map<String, Object>) map.get("server");
-                        if (server.containsKey("port")) {
-                            serverPort = (int) server.get("port");
-                            LOG.info("Read server port from application-dev.yml: {}", serverPort);
-                        }
+                    java.util.Map<String, Object> serverConfig = (java.util.Map<String, Object>) map.get("server");
+                    if (serverConfig.containsKey("port")) {
+                        return Integer.parseInt(serverConfig.get("port").toString());
                     }
                 }
             }
         } catch (IOException e) {
-            LOG.warn("Could not read application-dev.yml, using default port {}", serverPort);
+            LOG.warn("Could not load application-dev.yml, using default port {}", defaultPort);
+        } catch (NumberFormatException e) {
+            LOG.warn("Invalid port number in application-dev.yml, using default port {}", defaultPort);
         }
-        return serverPort;
+        return defaultPort;
     }
 
     /**
@@ -187,51 +199,59 @@ public class MsMediaApp {
      * @param args the command line arguments.
      */
     public static void main(String[] args) {
-        // Read server port from application-dev.yml
-        int serverPort = readServerPortFromYaml();
-
-        // Calculate SSH remote port based on server port
-        int sshRemotePort = serverPort + 1000;
-        LOG.info("Calculated SSH remote port: {}", sshRemotePort);
-
         // Initial Spring setup
         SpringApplication app = new SpringApplication(MsMediaApp.class);
         DefaultProfileUtil.addDefaultProfile(app);
 
-        // Set server port
-        System.setProperty("server.port", String.valueOf(serverPort));
-        System.setProperty("ssh.remote.port", String.valueOf(sshRemotePort));
-
         // Load additional configuration for dev environment
         app.setAdditionalProfiles("dev");
         System.setProperty("spring.config.additional-location", "classpath:/config/consul-config-dev.yml");
+
+        // Get the environment before running the application
+        ConfigurableEnvironment environment = new StandardEnvironment();
+        environment.setActiveProfiles("dev");
+
+        // Read server port from configuration
+        int localPort = readServerPortFromConfig();
+        int remotePort = localPort + 1000;
+
+        // Set ports in environment before application start
+        System.setProperty("ssh.local.port", String.valueOf(localPort));
+        System.setProperty("ssh.remote.port", String.valueOf(remotePort));
+        System.setProperty("spring.cloud.consul.discovery.port", String.valueOf(remotePort));
 
         // Now start the application with all the configuration from YML
         Environment env = app.run(args).getEnvironment();
 
         // After Spring environment is loaded, get the configuration values
         String remoteHost = env.getProperty("ssh.remote.host");
-        int localPort = Integer.parseInt(env.getProperty("server.port"));
         String user = env.getProperty("ssh.user");
         boolean enableSshForwarding = Boolean.parseBoolean(env.getProperty("ssh.forwarding.enabled"));
-        String password = env.getProperty("ssh.password");
 
         // Set up SSH tunnel after application startup if enabled
         if (enableSshForwarding) {
             LOG.info("Establishing SSH tunnel after application startup...");
-            setupSshPortForwarding(remoteHost, sshRemotePort, localPort, user, password);
+            setupSshPortForwarding(remoteHost, remotePort, localPort, user, env.getProperty("ssh.password"));
+            // Give the SSH connection some time to establish
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
 
         logApplicationStartup(env);
     }
 
-    // Add shutdown hook to clean up SSH session
-    static {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            if (sshSession != null && sshSession.isConnected()) {
-                sshSession.disconnect();
-                LOG.info("SSH session closed");
-            }
-        }));
-    }
+    // /**
+    // * Main method, used to run the application.
+    // *
+    // * @param args the command line arguments.
+    // */
+    // public static void main(String[] args) {
+    // SpringApplication app = new SpringApplication(MsMediaApp.class);
+    // DefaultProfileUtil.addDefaultProfile(app);
+    // Environment env = app.run(args).getEnvironment();
+    // logApplicationStartup(env);
+    // }
 }
