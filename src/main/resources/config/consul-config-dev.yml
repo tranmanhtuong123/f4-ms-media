@@ -11,8 +11,9 @@ ssh:
     host: appf4.io.vn
   user: root
   password: ledinhde788De
-  service-name: remote-msmedia
+  service-name: remote-msmedia-dev
   mysql_database: msmedia
+  redis_password: Hiendepzaikhoaitonhatxom
 spring:
   application:
     name: ${ssh.service-name}
