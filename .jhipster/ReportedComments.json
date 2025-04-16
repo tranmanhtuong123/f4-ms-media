@@ -1,0 +1,38 @@
+{
+  "annotations": {
+    "changelogDate": "20250416102756"
+  },
+  "applications": "*",
+  "clientRootFolder": "msMedia",
+  "databaseType": "sql",
+  "dto": "mapstruct",
+  "entityTableName": "reported_comments",
+  "fields": [
+    {
+      "fieldName": "reportedBy",
+      "fieldType": "Long"
+    },
+    {
+      "fieldName": "reason",
+      "fieldType": "String"
+    },
+    {
+      "fieldName": "createdAt",
+      "fieldType": "Instant"
+    }
+  ],
+  "jpaMetamodelFiltering": true,
+  "microserviceName": "msMedia",
+  "name": "ReportedComments",
+  "pagination": "pagination",
+  "relationships": [
+    {
+      "otherEntityName": "comments",
+      "relationshipName": "comment",
+      "relationshipSide": "left",
+      "relationshipType": "many-to-one"
+    }
+  ],
+  "searchEngine": "no",
+  "service": "serviceClass"
+}
